@@ -1,5 +1,6 @@
 """
 Pronote Flask app (single-file)
+Compatible Pronote 2024 (nouveau chiffrement)
 - Uses pronotepy to connect to the given Pronote instance
 - Shows homeworks and timetable in a clean, colorful UI
 """
@@ -154,13 +155,21 @@ def fetch():
         return redirect(url_for("index"))
 
     try:
-        client = Client(PRONOTE_URL, username=username, password=password)
+        # 🔥 IMPORTANT → Connexion Pronote 2024
+        client = Client(
+            PRONOTE_URL,
+            username=username,
+            password=password,
+            ent=None,
+            uuid=None,
+            bypass_crypto=False   # obligatoire pour Pronote 2024
+        )
 
         if not client.logged_in:
             flash("Connexion impossible : identifiants ou méthode CAS incorrecte.")
             return redirect(url_for("index"))
 
-        # Get homework
+        # ------- HOMEWORK -------
         today = date.today()
         raw_hw = client.homework(today, today + timedelta(days=14))
 
@@ -174,16 +183,15 @@ def fetch():
                 "color": getattr(hw.subject, "color", None)
             })
 
-        # Get timetable (week)
+        # ------- TIMETABLE -------
         start_week = today - timedelta(days=today.weekday())
         end_week = start_week + timedelta(days=6)
-
         lessons_raw = client.lessons(start_week, end_week)
-        week_days = []
 
+        week_days = []
         for i in range(7):
             d = start_week + timedelta(days=i)
-            lessons_today = [l for l in lessons_raw if l.date.date() == d]
+            lessons_today = [l for l in lessons_raw if l.start.date() == d]
 
             lessons = []
             for l in lessons_today:
@@ -192,7 +200,7 @@ def fetch():
                     "start": l.start.strftime("%H:%M"),
                     "end": l.end.strftime("%H:%M"),
                     "teacher": getattr(l, "teacher", "—"),
-                    "room": getattr(l, "room", None) or "-",
+                    "room": getattr(l, "classroom", "-"),
                     "color": getattr(l.subject, "color", None)
                 })
 
@@ -215,6 +223,5 @@ def fetch():
         return redirect(url_for("index"))
 
 
-# Render / Gunicorn compatible
 if __name__ == '__main__':
-    app.run(debug=False, host="0.0.0.0", port=5000)
+    app.run(debug=True, host="0.0.0.0", port=5000)
